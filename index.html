@@ -1,0 +1,514 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#FFF8F0" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1C1A18" media="(prefers-color-scheme: dark)">
+<title>Vorlesen</title>
+<style>
+  :root {
+    --bg: #FFF8F0;
+    --card: #FFFFFF;
+    --text: #1F1B16;
+    --muted: #6B6259;
+    --line: #E8DFD3;
+    --red: #D93A2B;
+    --green: #1E8A4C;
+    --blue: #2F6FD6;
+    --ok-bg: #E3F4EA;
+    --ok-text: #155C33;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1C1A18;
+      --card: #2A2724;
+      --text: #F5EFE7;
+      --muted: #B5ABA0;
+      --line: #3D3934;
+      --ok-bg: #1F3B2A;
+      --ok-text: #A6E3BD;
+    }
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 20px; line-height: 1.45;
+    padding: 16px 16px calc(250px + env(safe-area-inset-bottom));
+  }
+  .wrap { max-width: 720px; margin: 0 auto; }
+  h1 { font-size: 26px; margin: 4px 0 6px; }
+  .muted { color: var(--muted); }
+  .pill {
+    display: inline-block; padding: 4px 14px; border-radius: 999px;
+    background: var(--blue); color: #fff; font-weight: 700; font-size: 20px;
+  }
+  .progress { height: 12px; border-radius: 6px; background: var(--line); overflow: hidden; margin: 10px 0 4px; }
+  .progress > div { height: 100%; background: var(--green); }
+  .topbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .size { display: flex; gap: 8px; }
+  .size button {
+    font-size: 20px; font-weight: 700; width: 56px; height: 44px; border-radius: 12px;
+    border: 2px solid var(--line); background: var(--card); color: var(--text);
+  }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 18px 20px; margin-top: 12px; }
+  .where { font-size: 18px; color: var(--muted); margin-bottom: 8px; }
+  .as {
+    display: inline-block; margin-bottom: 10px; padding: 4px 14px; border-radius: 999px;
+    background: #8A4FD6; color: #fff; font-weight: 800; font-size: 22px;
+  }
+  .before { font-size: 18px; color: var(--muted); font-style: italic; border-left: 4px solid var(--line); padding-left: 12px; margin-bottom: 14px; }
+  .text { font-size: var(--fs, 30px); line-height: 1.45; font-weight: 500; }
+  .banner { margin-top: 12px; padding: 12px 16px; border-radius: 14px; background: var(--ok-bg); color: var(--ok-text); font-size: 19px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .banner button { font-size: 18px; padding: 6px 12px; border-radius: 10px; border: 0; background: rgba(0,0,0,0.08); color: inherit; font-weight: 700; }
+  ol.how { padding-left: 1.3em; margin: 10px 0 0; }
+  .list { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+  .item {
+    display: flex; gap: 12px; align-items: flex-start; text-align: left; width: 100%;
+    padding: 14px 16px; border-radius: 14px; border: 1px solid var(--line); background: var(--card);
+    color: var(--text); font-size: 19px; line-height: 1.35;
+  }
+  .item .mark { flex: 0 0 auto; width: 30px; font-size: 22px; text-align: center; }
+  .item .chap { display: block; font-size: 15px; color: var(--muted); margin-bottom: 2px; }
+  ol.how li { margin-bottom: 6px; }
+  .dock {
+    position: fixed; left: 0; right: 0; bottom: 0; background: var(--bg); border-top: 1px solid var(--line);
+    padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
+  }
+  .dock .wrap { display: flex; flex-direction: column; gap: 10px; }
+  .status { text-align: center; font-size: 20px; min-height: 28px; }
+  .status b { font-variant-numeric: tabular-nums; }
+  .meter { height: 10px; border-radius: 6px; background: var(--line); overflow: hidden; }
+  .meter > div { height: 100%; width: 0; background: var(--green); transition: width 80ms linear; }
+  .big {
+    width: 100%; min-height: 76px; border: 0; border-radius: 20px; font-size: 26px; font-weight: 800;
+    color: #fff; display: flex; align-items: center; justify-content: center; gap: 12px;
+  }
+  .big:active { transform: scale(0.98); }
+  .red { background: var(--red); }
+  .green { background: var(--green); }
+  .blue { background: var(--blue); }
+  .row { display: flex; gap: 10px; }
+  .small {
+    flex: 1; min-height: 54px; border-radius: 16px; font-size: 19px; font-weight: 700;
+    border: 2px solid var(--line); background: var(--card); color: var(--text);
+  }
+  .small:disabled { opacity: 0.35; }
+  .dot { width: 22px; height: 22px; border-radius: 50%; background: #fff; }
+  .square { width: 22px; height: 22px; border-radius: 4px; background: #fff; animation: pulse 1s infinite; }
+  @keyframes pulse { 50% { opacity: 0.3; } }
+  .error { margin-top: 12px; padding: 14px 16px; border-radius: 14px; background: #FDE8E6; color: #7A1A12; font-size: 18px; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <span class="pill hidden" id="role"></span>
+    <div class="size">
+      <button id="smaller" aria-label="Schrift kleiner">A−</button>
+      <button id="bigger" aria-label="Schrift größer">A+</button>
+    </div>
+  </div>
+  <div class="progress"><div id="bar" style="width:0"></div></div>
+  <div class="muted" id="count"></div>
+  <div id="screen"></div>
+  <div class="error hidden" id="error"></div>
+</div>
+
+<div class="dock"><div class="wrap" id="dock"></div></div>
+<audio id="player"></audio>
+
+<script>
+(() => {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+  // ---------- Inhalt aus dem Link (#d=…) ----------
+  // v2: { v:2, p:Projekt, r:Rolle, c:[{ n:Kapitel, l:[[id, text, davor], …] }] }
+  // v1: { p, r, l:[text, …] }
+  let info = { p: "", r: "", items: [] };
+
+  function b64urlToBytes(s) {
+    s = s.replace(/-/g, "+").replace(/_/g, "/");
+    while (s.length % 4) s += "=";
+    return Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+  }
+
+  async function readLink() {
+    const params = new URLSearchParams(location.hash.slice(1));
+    const d = params.get("d");
+    if (!d) return null;
+    const bytes = b64urlToBytes(d);
+    const json = params.get("z") === "1"
+      ? await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).text()
+      : new TextDecoder().decode(bytes);
+    return JSON.parse(json);
+  }
+
+  function toItems(data) {
+    const items = [];
+    if (data.v === 2) {
+      data.c.forEach((ch, ci) => ch.l.forEach(([id, text, prev, role]) => items.push({ id, text, prev, role: role || "", chapter: ch.n, ci })));
+    } else {
+      (data.l || []).forEach((text, i) => items.push({ id: "x" + i, text, prev: "", chapter: "", ci: 0 }));
+    }
+    return items;
+  }
+
+  // ---------- Speicher auf dem Handy (überlebt Schließen & Neustart) ----------
+  const memory = new Map();
+  let db = null;
+  function openDB() {
+    return new Promise((res) => {
+      try {
+        const r = indexedDB.open("vorlesen", 1);
+        r.onupgradeneeded = () => r.result.createObjectStore("takes");
+        r.onsuccess = () => res(r.result);
+        r.onerror = () => res(null);
+      } catch { res(null); }
+    });
+  }
+  const keyFor = (id) => info.p + "|" + info.r + "|" + id;
+  function dbDo(mode, fn) {
+    return new Promise((res) => {
+      if (!db) return res(undefined);
+      const tx = db.transaction("takes", mode);
+      const req = fn(tx.objectStore("takes"));
+      tx.oncomplete = () => res(req && req.result);
+      tx.onerror = () => res(undefined);
+    });
+  }
+  async function saveTake(id, take) { memory.set(id, take); await dbDo("readwrite", (s) => s.put(take, keyFor(id))); }
+  async function loadTakes() {
+    for (const it of info.items) {
+      const t = await dbDo("readonly", (s) => s.get(keyFor(it.id)));
+      if (t) memory.set(it.id, t);
+    }
+  }
+
+  // ---------- Mikrofon (bleibt offen, damit nicht jedes Mal gefragt wird) ----------
+  let ctx = null, stream = null, capturing = false, chunks = [], startedAt = 0, timer = null, wakeLock = null;
+  const workletCode = `
+    class Rec extends AudioWorkletProcessor {
+      process(inputs) { const ch = inputs[0] && inputs[0][0]; if (ch) this.port.postMessage(ch.slice(0)); return true; }
+    }
+    registerProcessor("rec", Rec);`;
+
+  function onChunk(data) {
+    if (!capturing) return;
+    chunks.push(data);
+    let peak = 0;
+    for (let i = 0; i < data.length; i++) { const v = Math.abs(data[i]); if (v > peak) peak = v; }
+    const m = $("meter");
+    if (m) m.firstElementChild.style.width = Math.max(0, Math.min(100, (20 * Math.log10(Math.max(peak, 1e-5)) + 60) / 60 * 100)) + "%";
+  }
+
+  async function ensureMic() {
+    if (ctx && ctx.state !== "closed" && stream && stream.active) { await ctx.resume(); return true; }
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 },
+      });
+    } catch {
+      showError("Das Mikrofon ist nicht erlaubt. Bitte beim Nachfragen „Erlauben“ tippen und nochmal versuchen.");
+      return false;
+    }
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    await ctx.resume();
+    const source = ctx.createMediaStreamSource(stream);
+    let node;
+    if (ctx.audioWorklet) {
+      await ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([workletCode], { type: "application/javascript" })));
+      node = new AudioWorkletNode(ctx, "rec");
+      node.port.onmessage = (e) => onChunk(e.data);
+    } else {
+      node = ctx.createScriptProcessor(4096, 1, 1);
+      node.onaudioprocess = (e) => onChunk(new Float32Array(e.inputBuffer.getChannelData(0)));
+    }
+    const mute = ctx.createGain();
+    mute.gain.value = 0;
+    source.connect(node);
+    node.connect(mute).connect(ctx.destination);
+    return true;
+  }
+
+  /** Float → 16-Bit-PCM; leise Aufnahmen behutsam anheben (max. +20 dB, Spitze −1 dB). */
+  function toPCM(parts) {
+    const n = parts.reduce((s, c) => s + c.length, 0);
+    let peak = 0;
+    for (const c of parts) for (let i = 0; i < c.length; i++) { const v = Math.abs(c[i]); if (v > peak) peak = v; }
+    const gain = peak > 0.001 ? Math.min(10, 0.89 / peak) : 1;
+    const pcm = new Int16Array(n);
+    let o = 0;
+    for (const c of parts) for (let i = 0; i < c.length; i++) {
+      const s = Math.max(-1, Math.min(1, c[i] * gain));
+      pcm[o++] = s < 0 ? s * 0x8000 : s * 0x7fff;
+    }
+    return pcm;
+  }
+
+  // ---------- Eine WAV mit allen Sätzen + unsichtbarer Beschriftung (Chunk „vrls“) ----------
+  function buildWav(takes, rate) {
+    const gap = Math.round(rate * 0.75);
+    const marks = [];
+    let total = 0;
+    takes.forEach((t, i) => {
+      if (i > 0) total += gap;
+      marks.push({ id: t.id, ch: t.chapter, n: t.n, start: total, len: t.pcm.length });
+      total += t.pcm.length;
+    });
+    const meta = new TextEncoder().encode(JSON.stringify({ v: 1, p: info.p, r: info.r, rate, takes: marks }));
+    const metaPad = meta.length % 2;
+    const size = 12 + 24 + 8 + meta.length + metaPad + 8 + total * 2;
+    const buf = new ArrayBuffer(size);
+    const v = new DataView(buf);
+    const bytes = new Uint8Array(buf);
+    const str = (o, s) => { for (let i = 0; i < 4; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+    str(0, "RIFF"); v.setUint32(4, size - 8, true); str(8, "WAVE");
+    str(12, "fmt "); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+    let o = 36;
+    str(o, "vrls"); v.setUint32(o + 4, meta.length, true); bytes.set(meta, o + 8); o += 8 + meta.length + metaPad;
+    str(o, "data"); v.setUint32(o + 4, total * 2, true); o += 8;
+    const out = new Int16Array(buf, o, total);
+    marks.forEach((m, i) => out.set(takes[i].pcm, m.start));
+    return buf;
+  }
+
+  // ---------- Ablauf ----------
+  let idx = 0, screen = "intro", lastSaved = null;
+  const roles = () => [...new Set(info.items.map((i) => i.role).filter(Boolean))];
+  const recordedCount = () => info.items.filter((it) => memory.has(it.id)).length;
+  const firstOpen = () => { const i = info.items.findIndex((it) => !memory.has(it.id)); return i < 0 ? info.items.length : i; };
+
+  function header() {
+    if (info.r) {
+      $("role").textContent = roles().length > 1 || (roles()[0] && roles()[0] !== info.r) ? "Für " + info.r : "Deine Rolle: " + info.r;
+      $("role").classList.remove("hidden");
+    }
+    const done = recordedCount(), all = info.items.length;
+    $("bar").style.width = (all ? done / all * 100 : 0) + "%";
+    $("count").textContent = all ? done + " von " + all + " Sätzen aufgenommen" : "";
+  }
+
+  function render() {
+    header();
+    const s = $("screen"), d = $("dock");
+    hideError();
+    if (screen === "intro") {
+      const chapters = [...new Set(info.items.map((i) => i.chapter).filter(Boolean))];
+      s.innerHTML = `
+        <h1>Hallo! 😊</h1>
+        <div class="card">
+          ${info.p ? `<div class="where">${esc(info.p)}</div>` : ""}
+          <div>Du sprichst <b>${info.items.length} Sätze</b>${chapters.length > 1 ? ` in ${chapters.length} Kapiteln` : ""}.</div>
+          ${roles().length > 1 ? `<div style="margin-top:6px">Deine Figuren: <b>${roles().map(esc).join(", ")}</b> – bei jedem Satz steht, wer gerade dran ist.</div>` : ""}
+          <ol class="how">
+            <li>Auf den <b>roten Knopf</b> drücken</li>
+            <li>Den Satz in Ruhe vorlesen</li>
+            <li>Auf <b>„Fertig“</b> drücken – dann kommt der nächste Satz</li>
+          </ol>
+          <div class="muted" style="margin-top:10px">Alles wird sofort gespeichert. Du kannst jederzeit aufhören und später weitermachen.</div>
+        </div>`;
+      const done = recordedCount();
+      d.innerHTML = `
+        <button class="big blue" id="go">${done ? "Weitermachen" : "Los geht's"}</button>
+        ${done ? `<div class="row"><button class="small" id="listAll">Satz neu aufnehmen</button><button class="small" id="sendNow">Bisherige senden</button></div>` : ""}`;
+      $("go").onclick = () => { idx = firstOpen(); screen = idx >= info.items.length ? "end" : "line"; render(); };
+      if (done) {
+        $("sendNow").onclick = () => { screen = "end"; render(); };
+        $("listAll").onclick = () => { screen = "list"; render(); };
+      }
+      return;
+    }
+    if (screen === "list") {
+      s.innerHTML = `
+        <h1>Alle Sätze</h1>
+        <div class="muted">Tippe auf einen Satz, um ihn (neu) aufzunehmen.</div>
+        <div class="list">${info.items.map((it, i) => `
+          <button class="item" data-i="${i}">
+            <span class="mark">${memory.has(it.id) ? "✅" : "⚪️"}</span>
+            <span><span class="chap">${it.chapter ? esc(it.chapter) + " · " : ""}Satz ${i + 1}${roles().length > 1 && it.role ? " · " + esc(it.role) : ""}</span>${esc(it.text)}</span>
+          </button>`).join("")}</div>`;
+      s.querySelectorAll(".item").forEach((b) => b.onclick = () => { idx = Number(b.dataset.i); lastSaved = null; screen = "line"; render(); window.scrollTo(0, 0); });
+      const done = recordedCount();
+      d.innerHTML = `
+        <button class="big green" id="send" ${done ? "" : "disabled"}>Per WhatsApp senden</button>
+        <button class="small" id="cont">Weiter aufnehmen ›</button>`;
+      $("send").onclick = () => { screen = "end"; render(); };
+      $("cont").onclick = () => { idx = Math.min(firstOpen(), info.items.length - 1); screen = "line"; render(); };
+      return;
+    }
+    if (screen === "end") {
+      const done = recordedCount(), all = info.items.length;
+      s.innerHTML = `
+        <h1>${done === all ? "Geschafft! 🎉" : "Fast fertig"}</h1>
+        <div class="card">${done === all
+          ? "Alle Sätze sind aufgenommen. Jetzt nur noch auf den grünen Knopf drücken und an mich schicken."
+          : `${done} von ${all} Sätzen sind aufgenommen. Du kannst schon senden oder zurückgehen und die fehlenden aufnehmen.`}</div>`;
+      d.innerHTML = `
+        <div class="status" id="status"></div>
+        <button class="big green" id="send" ${done ? "" : "disabled"}>Per WhatsApp senden</button>
+        <button class="small" id="back">Einzelne Sätze ansehen / neu aufnehmen</button>`;
+      $("send").onclick = send;
+      $("back").onclick = () => { screen = "list"; render(); };
+      return;
+    }
+    // Satz
+    const it = info.items[idx];
+    const has = memory.has(it.id);
+    s.innerHTML = `
+      ${lastSaved !== null ? `<div class="banner">✓ Satz ${lastSaved + 1} gespeichert
+          <button id="redoLast">Nochmal</button><button id="playLast">▶ Anhören</button></div>` : ""}
+      <div class="card">
+        <div class="where">${it.chapter ? esc(it.chapter) + " · " : ""}Satz ${idx + 1} von ${info.items.length}</div>
+        ${roles().length > 1 && it.role ? `<div class="as">Du sprichst: ${esc(it.role)}</div>` : ""}
+        ${it.prev ? `<div class="before">Davor – ${esc(it.prev)}</div>` : ""}
+        <div class="text">${esc(it.text)}</div>
+      </div>`;
+    if (lastSaved !== null) {
+      const ls = lastSaved;
+      $("redoLast").onclick = () => { idx = ls; lastSaved = null; render(); };
+      $("playLast").onclick = () => play(info.items[ls].id);
+    }
+    d.innerHTML = has ? `
+        <div class="status">✓ Dieser Satz ist schon aufgenommen.</div>
+        <button class="big blue" id="next">Weiter ›</button>
+        <div class="row"><button class="small" id="listen">▶ Anhören</button><button class="small" id="rec">↺ Neu aufnehmen</button></div>
+        <div class="row"><button class="small" id="prev" ${idx ? "" : "disabled"}>‹ Zurück</button><button class="small" id="list">Übersicht</button></div>` : `
+        <div class="status">Lies den Satz vor. Drück dazu auf den roten Knopf.</div>
+        <button class="big red" id="rec"><span class="dot"></span> Aufnehmen</button>
+        <div class="row"><button class="small" id="prev" ${idx ? "" : "disabled"}>‹ Zurück</button><button class="small" id="skip">Überspringen ›</button></div>
+        <button class="small" id="list">Übersicht aller Sätze</button>`;
+    $("rec").onclick = startRec;
+    $("prev").onclick = () => { idx--; lastSaved = null; render(); };
+    if (has) {
+      $("next").onclick = () => { lastSaved = null; goNext(); };
+      $("listen").onclick = () => play(it.id);
+      $("list").onclick = () => { screen = "list"; render(); };
+    } else {
+      $("skip").onclick = () => { lastSaved = null; goNext(); };
+      $("list").onclick = () => { screen = "list"; render(); };
+    }
+  }
+
+  function goNext() {
+    idx++;
+    screen = idx >= info.items.length ? "end" : "line";
+    render();
+    window.scrollTo(0, 0);
+  }
+
+  async function startRec() {
+    if (!(await ensureMic())) return;
+    chunks = [];
+    capturing = true;
+    startedAt = Date.now();
+    try { wakeLock = await navigator.wakeLock?.request("screen"); } catch {}
+    $("dock").innerHTML = `
+      <div class="status" id="status"></div>
+      <div class="meter" id="meter"><div></div></div>
+      <button class="big red" id="stop"><span class="square"></span> Fertig</button>
+      <button class="small" id="cancel">Abbrechen</button>`;
+    $("stop").onclick = stopRec;
+    $("cancel").onclick = () => { capturing = false; clearInterval(timer); render(); };
+    const tick = () => {
+      const s = Math.floor((Date.now() - startedAt) / 1000);
+      $("status").innerHTML = "Aufnahme läuft … <b>" + Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0") + "</b>";
+    };
+    tick();
+    timer = setInterval(tick, 250);
+  }
+
+  async function stopRec() {
+    capturing = false;
+    clearInterval(timer);
+    try { await wakeLock?.release(); } catch {}
+    const it = info.items[idx];
+    const n = chunks.reduce((s, c) => s + c.length, 0);
+    if (n < ctx.sampleRate * 0.3) { render(); showError("Das war zu kurz – bitte nochmal."); return; }
+    await saveTake(it.id, { pcm: toPCM(chunks), rate: ctx.sampleRate });
+    lastSaved = idx;
+    goNext();
+  }
+
+  function play(id) {
+    const t = memory.get(id);
+    if (!t) return;
+    const wav = buildWav([{ id, chapter: "", n: 0, pcm: t.pcm }], t.rate);
+    const p = $("player");
+    p.src = URL.createObjectURL(new Blob([wav], { type: "audio/wav" }));
+    p.play();
+  }
+
+  async function send() {
+    const takes = info.items
+      .map((it, i) => ({ ...it, n: i + 1, take: memory.get(it.id) }))
+      .filter((t) => t.take)
+      .map((t) => ({ id: t.id, chapter: t.chapter, n: t.n, pcm: t.take.pcm, rate: t.take.rate }));
+    if (!takes.length) return;
+    const rate = takes[0].rate;
+    const wav = buildWav(takes.filter((t) => t.rate === rate), rate);
+    const clean = (s) => (s || "").replace(/[\\/:*?"<>|]/g, "-").trim();
+    const name = [clean(info.r) || "Aufnahme", clean(info.p), takes.length + " Sätze"].filter(Boolean).join(" - ") + ".wav";
+    const file = new File([wav], name, { type: "audio/wav" });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: name });
+        setStatus("Danke! 💛 Die Aufnahme ist unterwegs.");
+      } catch (e) {
+        if (e.name !== "AbortError") showError("Teilen hat nicht geklappt. Bitte nochmal auf „Per WhatsApp senden“ drücken.");
+      }
+    } else {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(file);
+      a.download = name;
+      a.click();
+      setStatus("Die Datei wurde gespeichert. Bitte per WhatsApp als Dokument schicken.");
+    }
+  }
+
+  function setStatus(msg) { const s = $("status"); if (s) s.textContent = msg; }
+  function showError(msg) { $("error").textContent = msg; $("error").classList.remove("hidden"); }
+  function hideError() { $("error").classList.add("hidden"); }
+
+  // ---------- Schriftgröße ----------
+  let fs = 30;
+  try { fs = Math.max(24, Number(localStorage.getItem("schrift")) || 30); } catch {}
+  function applySize() {
+    document.documentElement.style.setProperty("--fs", fs + "px");
+    try { localStorage.setItem("schrift", fs); } catch {}
+  }
+  $("smaller").onclick = () => { fs = Math.max(24, fs - 3); applySize(); };
+  $("bigger").onclick = () => { fs = Math.min(54, fs + 3); applySize(); };
+  applySize();
+
+  // Für automatische Tests
+  window.__vorlesen = { buildWav, toPCM, info: () => info, saveTake, memory, render, setIdx: (i) => { idx = i; screen = "line"; render(); } };
+
+  (async () => {
+    try {
+      const data = await readLink();
+      if (data) info = { p: data.p || "", r: data.r || "", items: toItems(data) };
+    } catch {
+      showError("Der Link ist beschädigt – bitte frag nach einem neuen Link.");
+    }
+    if (!info.items.length) {
+      $("screen").innerHTML = '<div class="card">In diesem Link steht kein Text. Bitte frag nach einem neuen Link.</div>';
+      return;
+    }
+    db = await openDB();
+    await loadTakes();
+    render();
+    if (!navigator.mediaDevices?.getUserMedia) {
+      showError("Dieser Browser kann nicht aufnehmen. Bitte den Link in Safari (iPhone) oder Chrome (Android) öffnen.");
+    }
+  })();
+})();
+</script>
+</body>
+</html>
