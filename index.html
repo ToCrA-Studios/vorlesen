@@ -101,6 +101,20 @@
   @keyframes pulse { 50% { opacity: 0.3; } }
   .error { margin-top: 12px; padding: 14px 16px; border-radius: 14px; background: #FDE8E6; color: #7A1A12; font-size: 18px; }
   .hidden { display: none !important; }
+  .pick { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+  .pick button {
+    display: flex; align-items: center; gap: 14px; width: 100%; padding: 16px 18px; border-radius: 16px;
+    border: 3px solid var(--line); background: var(--card); color: var(--text); font-size: 22px; font-weight: 700; text-align: left;
+  }
+  .pick button.on { border-color: #8A4FD6; background: rgba(138, 79, 214, 0.12); }
+  .pick .box { flex: 0 0 auto; width: 30px; height: 30px; border-radius: 8px; border: 3px solid var(--line); display: flex; align-items: center; justify-content: center; font-size: 20px; }
+  .pick button.on .box { border-color: #8A4FD6; background: #8A4FD6; color: #fff; }
+  .pick .n { margin-left: auto; font-size: 17px; font-weight: 500; color: var(--muted); }
+  .book h2 { font-size: 20px; margin: 18px 0 6px; color: var(--muted); }
+  .book p { margin: 0 0 10px; font-size: 20px; }
+  .book p .who { display: block; font-size: 14px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
+  .book p.mine { border-left: 5px solid #8A4FD6; padding-left: 10px; }
+  .book p.mine .who { color: #8A4FD6; }
 </style>
 </head>
 <body>
@@ -131,6 +145,14 @@
   // v2: { v:2, p:Projekt, r:Rolle, c:[{ n:Kapitel, l:[[id, text, davor], …] }] }
   // v1: { p, r, l:[text, …] }
   let info = { p: "", r: "", items: [] };
+  // Link für alle (r leer): jeder sieht das ganze Buch und wählt seine Rollen selbst
+  let all = [], choose = false, picked = [];
+  const pickKey = () => "rollen|" + info.p;
+  function applyPick() {
+    info.items = all.filter((it) => picked.includes(it.role));
+    info.r = picked.join(", ");
+    try { localStorage.setItem(pickKey(), JSON.stringify(picked)); } catch {}
+  }
 
   function b64urlToBytes(s) {
     s = s.replace(/-/g, "+").replace(/_/g, "/");
@@ -172,7 +194,7 @@
       } catch { res(null); }
     });
   }
-  const keyFor = (id) => info.p + "|" + info.r + "|" + id;
+  const keyFor = (id) => info.p + "|" + (choose ? "*" : info.r) + "|" + id;
   function dbDo(mode, fn) {
     return new Promise((res) => {
       if (!db) return res(undefined);
@@ -282,12 +304,15 @@
   // ---------- Ablauf ----------
   let idx = 0, screen = "intro", lastSaved = null;
   const roles = () => [...new Set(info.items.map((i) => i.role).filter(Boolean))];
+  const allRoles = () => [...new Set(all.map((i) => i.role).filter(Boolean))];
   const recordedCount = () => info.items.filter((it) => memory.has(it.id)).length;
   const firstOpen = () => { const i = info.items.findIndex((it) => !memory.has(it.id)); return i < 0 ? info.items.length : i; };
 
   function header() {
+    $("role").classList.toggle("hidden", !info.r);
     if (info.r) {
-      $("role").textContent = roles().length > 1 || (roles()[0] && roles()[0] !== info.r) ? "Für " + info.r : "Deine Rolle: " + info.r;
+      $("role").textContent = choose ? (picked.length > 1 ? "Deine Rollen: " : "Deine Rolle: ") + info.r
+        : roles().length > 1 || (roles()[0] && roles()[0] !== info.r) ? "Für " + info.r : "Deine Rolle: " + info.r;
       $("role").classList.remove("hidden");
     }
     const done = recordedCount(), all = info.items.length;
@@ -299,6 +324,39 @@
     header();
     const s = $("screen"), d = $("dock");
     hideError();
+    if (screen === "pick") {
+      s.innerHTML = `
+        <h1>Wen liest du? 📖</h1>
+        <div class="muted">${info.p ? esc(info.p) + " · " : ""}Tippe deine Rolle an – du kannst auch mehrere wählen.</div>
+        <div class="pick">${allRoles().map((r) => `
+          <button data-r="${esc(r)}" class="${picked.includes(r) ? "on" : ""}">
+            <span class="box">${picked.includes(r) ? "✓" : ""}</span>${esc(r)}
+            <span class="n">${all.filter((i) => i.role === r).length} Sätze</span>
+          </button>`).join("")}</div>`;
+      s.querySelectorAll(".pick button").forEach((b) => b.onclick = () => {
+        const r = b.dataset.r;
+        picked = picked.includes(r) ? picked.filter((x) => x !== r) : [...picked, r];
+        picked.sort((a, b) => allRoles().indexOf(a) - allRoles().indexOf(b));
+        render();
+      });
+      d.innerHTML = `
+        <button class="big blue" id="ok" ${picked.length ? "" : "disabled"}>${picked.length ? "Weiter ›" : "Bitte eine Rolle antippen"}</button>
+        <button class="small" id="readAll">Ganzes Buch lesen</button>`;
+      $("ok").onclick = async () => { applyPick(); await loadTakes(); screen = "intro"; render(); };
+      $("readAll").onclick = () => { screen = "book"; render(); window.scrollTo(0, 0); };
+      return;
+    }
+    if (screen === "book") {
+      let html = "", ch = null;
+      for (const it of all) {
+        if (it.chapter !== ch) { ch = it.chapter; if (ch) html += `<h2>${esc(ch)}</h2>`; }
+        html += `<p class="${picked.includes(it.role) ? "mine" : ""}"><span class="who">${esc(it.role)}</span>${esc(it.text)}</p>`;
+      }
+      s.innerHTML = `<h1>Das ganze Buch</h1><div class="book">${html}</div>`;
+      d.innerHTML = `<button class="big blue" id="back">‹ Zurück</button>`;
+      $("back").onclick = () => { screen = info.items.length ? "intro" : "pick"; render(); window.scrollTo(0, 0); };
+      return;
+    }
     if (screen === "intro") {
       const chapters = [...new Set(info.items.map((i) => i.chapter).filter(Boolean))];
       s.innerHTML = `
@@ -317,7 +375,12 @@
       const done = recordedCount();
       d.innerHTML = `
         <button class="big blue" id="go">${done ? "Weitermachen" : "Los geht's"}</button>
-        ${done ? `<div class="row"><button class="small" id="listAll">Satz neu aufnehmen</button><button class="small" id="sendNow">Bisherige senden</button></div>` : ""}`;
+        ${done ? `<div class="row"><button class="small" id="listAll">Satz neu aufnehmen</button><button class="small" id="sendNow">Bisherige senden</button></div>` : ""}
+        ${choose ? `<div class="row"><button class="small" id="repick">Rolle ändern</button><button class="small" id="readAll">Ganzes Buch lesen</button></div>` : ""}`;
+      if (choose) {
+        $("repick").onclick = () => { screen = "pick"; render(); };
+        $("readAll").onclick = () => { screen = "book"; render(); window.scrollTo(0, 0); };
+      }
       $("go").onclick = () => { idx = firstOpen(); screen = idx >= info.items.length ? "end" : "line"; render(); };
       if (done) {
         $("sendNow").onclick = () => { screen = "end"; render(); };
@@ -493,11 +556,19 @@
   (async () => {
     try {
       const data = await readLink();
-      if (data) info = { p: data.p || "", r: data.r || "", items: toItems(data) };
+      if (data) {
+        all = toItems(data);
+        info = { p: data.p || "", r: data.r || "", items: all };
+        choose = data.v === 2 && !data.r;
+        if (choose) {
+          try { picked = JSON.parse(localStorage.getItem(pickKey()) || "[]").filter((r) => allRoles().includes(r)); } catch { picked = []; }
+          if (picked.length) applyPick(); else { info.items = []; screen = "pick"; }
+        }
+      }
     } catch {
       showError("Der Link ist beschädigt – bitte frag nach einem neuen Link.");
     }
-    if (!info.items.length) {
+    if (!all.length) {
       $("screen").innerHTML = '<div class="card">In diesem Link steht kein Text. Bitte frag nach einem neuen Link.</div>';
       return;
     }
