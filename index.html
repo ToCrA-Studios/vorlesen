@@ -405,8 +405,16 @@
             <span class="box">${picked.includes(r) ? "✓" : ""}</span>${esc(r)}
             ${(() => { const mine = all.filter((i) => i.role === r), got = mine.filter((i) => memory.has(i.id)).length;
                return got === mine.length ? `<span class="done-tag">✓ fertig</span>` : `<span class="n">${got ? got + " von " : ""}${mine.length} Sätze</span>`; })()}
-          </button>`).join("")}</div>`;
+          </button>`).join("")}</div>
+        ${all.some((i) => memory.has(i.id)) ? `<button class="linkbtn" id="wipe">🗑 Meine Aufnahmen auf diesem Handy löschen</button>` : ""}`;
       if ($("rename")) $("rename").onclick = () => { screen = "name"; render(); };
+      if ($("wipe")) $("wipe").onclick = async () => {
+        const n = all.filter((i) => memory.has(i.id)).length;
+        if (!confirm(`Alle ${n} Aufnahmen auf diesem Handy löschen? Was du schon gesendet hast, ist davon nicht betroffen.`)) return;
+        await dbDo("readwrite", (st) => { for (const i of all) st.delete(keyFor(i.id)); });
+        memory.clear();
+        render();
+      };
       s.querySelectorAll(".pick button").forEach((b) => b.onclick = () => {
         const r = b.dataset.r;
         picked = picked.includes(r) ? picked.filter((x) => x !== r) : [...picked, r];
