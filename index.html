@@ -110,6 +110,11 @@
   @keyframes pulse { 50% { opacity: 0.3; } }
   .error { margin-top: 12px; padding: 14px 16px; border-radius: 14px; background: #FDE8E6; color: #7A1A12; font-size: 18px; }
   .hidden { display: none !important; }
+  .namein {
+    width: 100%; margin-top: 16px; padding: 16px 18px; font-size: 26px; border-radius: 16px;
+    border: 3px solid var(--line); background: var(--card); color: var(--text);
+  }
+  .linkbtn { border: 0; background: none; color: var(--blue); font-size: 17px; padding: 4px 0; text-decoration: underline; }
   .pick { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
   .pick button {
     display: flex; align-items: center; gap: 14px; width: 100%; padding: 16px 18px; border-radius: 16px;
@@ -157,6 +162,8 @@
   let info = { p: "", r: "", items: [] };
   // Link für alle (r leer): jeder sieht das ganze Buch und wählt seine Rollen selbst
   let all = [], choose = false, picked = [];
+  let reader = "";
+  try { reader = localStorage.getItem("name") || ""; } catch {}
   const pickKey = () => "rollen|" + info.p;
   function applyPick() {
     info.items = all.filter((it) => picked.includes(it.role));
@@ -291,10 +298,10 @@
     let total = 0;
     takes.forEach((t, i) => {
       if (i > 0) total += gap;
-      marks.push({ id: t.id, ch: t.chapter, n: t.n, start: total, len: t.pcm.length });
+      marks.push({ id: t.id, ch: t.chapter, n: t.n, start: total, len: t.pcm.length, at: t.at || undefined });
       total += t.pcm.length;
     });
-    const meta = new TextEncoder().encode(JSON.stringify({ v: 1, p: info.p, r: info.r, rate, takes: marks }));
+    const meta = new TextEncoder().encode(JSON.stringify({ v: 1, p: info.p, r: info.r, s: reader || undefined, rate, takes: marks }));
     const metaPad = meta.length % 2;
     const size = 12 + 24 + 8 + meta.length + metaPad + 8 + total * 2;
     const buf = new ArrayBuffer(size);
@@ -335,9 +342,27 @@
     header();
     const s = $("screen"), d = $("dock");
     hideError();
+    if (screen === "name") {
+      s.innerHTML = `
+        <h1>Wie heißt du? 😊</h1>
+        <div class="muted">Damit man später weiß, wer gelesen hat.</div>
+        <input id="nameIn" class="namein" autocomplete="given-name" placeholder="z. B. Mama" value="${esc(reader)}">`;
+      d.innerHTML = `<button class="big blue" id="ok">Weiter ›</button>`;
+      const inp = $("nameIn");
+      const ok = () => {
+        reader = inp.value.trim();
+        if (!reader) { inp.focus(); return; }
+        try { localStorage.setItem("name", reader); } catch {}
+        screen = "pick"; render();
+      };
+      $("ok").onclick = ok;
+      inp.onkeydown = (e) => { if (e.key === "Enter") ok(); };
+      return;
+    }
     if (screen === "pick") {
       s.innerHTML = `
-        <h1>Wen liest du? 📖</h1>
+        <h1>${reader ? "Hallo " + esc(reader) + "! " : ""}Wen liest du? 📖</h1>
+        ${reader ? `<button class="linkbtn" id="rename">Nicht ${esc(reader)}? Namen ändern</button>` : ""}
         <div class="muted">${info.p ? esc(info.p) + " · " : ""}Tippe deine Rolle an – du kannst auch mehrere wählen.</div>
         <div class="pick">${allRoles().map((r) => `
           <button data-r="${esc(r)}" class="${picked.includes(r) ? "on" : ""}">
@@ -345,6 +370,7 @@
             ${(() => { const mine = all.filter((i) => i.role === r), got = mine.filter((i) => memory.has(i.id)).length;
                return got === mine.length ? `<span class="done-tag">✓ fertig</span>` : `<span class="n">${got ? got + " von " : ""}${mine.length} Sätze</span>`; })()}
           </button>`).join("")}</div>`;
+      if ($("rename")) $("rename").onclick = () => { screen = "name"; render(); };
       s.querySelectorAll(".pick button").forEach((b) => b.onclick = () => {
         const r = b.dataset.r;
         picked = picked.includes(r) ? picked.filter((x) => x !== r) : [...picked, r];
@@ -506,7 +532,7 @@
     const it = info.items[idx];
     const n = chunks.reduce((s, c) => s + c.length, 0);
     if (n < ctx.sampleRate * 0.3) { render(); showError("Das war zu kurz – bitte nochmal."); return; }
-    await saveTake(it.id, { pcm: toPCM(chunks), rate: ctx.sampleRate });
+    await saveTake(it.id, { pcm: toPCM(chunks), rate: ctx.sampleRate, at: Date.now() });
     // erst bestätigen, dann kommt der nächste Satz
     justRecorded = true;
     render();
@@ -555,12 +581,12 @@
     const takes = info.items
       .map((it, i) => ({ ...it, n: i + 1, take: memory.get(it.id) }))
       .filter((t) => t.take)
-      .map((t) => ({ id: t.id, chapter: t.chapter, n: t.n, pcm: t.take.pcm, rate: t.take.rate }));
+      .map((t) => ({ id: t.id, chapter: t.chapter, n: t.n, pcm: t.take.pcm, rate: t.take.rate, at: t.take.at }));
     if (!takes.length) return;
     const rate = takes[0].rate;
     const wav = buildWav(takes.filter((t) => t.rate === rate), rate);
     const clean = (s) => (s || "").replace(/[\\/:*?"<>|]/g, "-").trim();
-    const name = [clean(info.r) || "Aufnahme", clean(info.p), takes.length + " Sätze"].filter(Boolean).join(" - ") + ".pdf";
+    const name = [clean(reader), clean(info.r) || "Aufnahme", clean(info.p), takes.length + " Sätze"].filter(Boolean).join(" - ") + ".pdf";
     const pdf = wrapInPdf(wav, ["Vorlese-Aufnahme", (info.r || "") + " - " + takes.length + " S\xE4tze",
       "In den Buch-Vorlese-Editor ziehen."]);
     const file = new File([pdf], name, { type: "application/pdf" });
@@ -627,6 +653,7 @@
         if (choose) {
           try { picked = JSON.parse(localStorage.getItem(pickKey()) || "[]").filter((r) => allRoles().includes(r)); } catch { picked = []; }
           if (picked.length) applyPick(); else { info.items = []; screen = "pick"; }
+          if (!reader) screen = "name";
         }
       }
     } catch {
