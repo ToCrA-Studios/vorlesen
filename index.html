@@ -108,6 +108,8 @@
   .dot { width: 22px; height: 22px; border-radius: 50%; background: #fff; }
   .square { width: 22px; height: 22px; border-radius: 4px; background: #fff; animation: pulse 1s infinite; }
   @keyframes pulse { 50% { opacity: 0.3; } }
+  .count { background: var(--muted); font-size: 34px; }
+  .rechint { text-align: center; font-size: 16px; color: var(--muted); }
   .error { margin-top: 12px; padding: 14px 16px; border-radius: 14px; background: #FDE8E6; color: #7A1A12; font-size: 18px; }
   .hidden { display: none !important; }
   .error.ok { background: var(--ok-bg); color: var(--ok-text); }
@@ -292,10 +294,11 @@
   }
 
   /**
-   * Das Tippen auf Aufnehmen/Fertig klopft hörbar ins Mikrofon, wenn das Handy auf dem Tisch liegt.
-   * Darum vorne und hinten ein Stück wegschneiden und weich ein- und ausblenden.
+   * Das Tippen auf Fertig klopft hörbar ins Mikrofon, wenn das Handy auf dem Tisch liegt.
+   * Das Ende wird darum immer abgeschnitten (man wartet nach dem Satz kurz); das Tippen auf Aufnehmen
+   * liegt vor dem Countdown und ist schon draußen. Weich ein- und ausblenden gegen Knacken.
    */
-  const CUT_HEAD = 0.3, CUT_TAIL = 0.35, FADE = 0.02;
+  const CUT_HEAD = 0.1, CUT_TAIL = 0.6, FADE = 0.02, COUNTDOWN = 3;
   function trimTaps(parts, rate) {
     const n = parts.reduce((s, c) => s + c.length, 0);
     const all = new Float32Array(n);
@@ -428,8 +431,8 @@
           ${roles().length > 1 ? `<div style="margin-top:6px">Deine Figuren: <b>${roles().map(esc).join(", ")}</b> – bei jedem Satz steht, wer gerade dran ist.</div>` : ""}
           <ol class="how">
             <li>Auf den <b>roten Knopf</b> drücken</li>
-            <li>Den Satz in Ruhe vorlesen</li>
-            <li>Auf <b>„Fertig“</b> drücken – dann kommt der nächste Satz</li>
+            <li>Kurz warten (3 – 2 – 1), dann den Satz in Ruhe vorlesen</li>
+            <li>Nach dem Satz kurz still sein, dann <b>„Fertig“</b> drücken</li>
           </ol>
           <div class="muted" style="margin-top:10px">Alles wird sofort gespeichert. Du kannst jederzeit aufhören und später weitermachen.</div>
         </div>`;
@@ -547,16 +550,34 @@
       showError("Die Aufnahme lässt sich nicht starten. Bitte die Seite neu laden und nochmal versuchen.", e && (e.name + ": " + e.message));
       return;
     }
+    try { wakeLock = await navigator.wakeLock?.request("screen"); } catch {}
+    const cancel = () => { capturing = false; clearInterval(timer); try { wakeLock?.release(); } catch {} render(); };
+    // Countdown: das Klopfen vom Antippen ist vorbei, bevor die Aufnahme beginnt
+    let left = COUNTDOWN;
+    $("dock").innerHTML = `
+      <div class="rechint">Gleich geht's los …</div>
+      <div class="row"><button class="big count" id="countdown" disabled>${left}</button>
+      <button class="small narrow" id="cancel">Abbrechen</button></div>`;
+    $("cancel").onclick = cancel;
+    const go = await new Promise((resolve) => {
+      timer = setInterval(() => {
+        if (!$("countdown")) { clearInterval(timer); resolve(false); return; }
+        if (--left > 0) { $("countdown").textContent = left; return; }
+        clearInterval(timer);
+        resolve(true);
+      }, 800);
+    });
+    if (!go) return;
     chunks = [];
     capturing = true;
     startedAt = Date.now();
-    try { wakeLock = await navigator.wakeLock?.request("screen"); } catch {}
     $("dock").innerHTML = `
       <div class="meter" id="meter"><div></div></div>
       <div class="row"><button class="big red" id="stop"><span class="square"></span> Fertig <span id="status"></span></button>
-      <button class="small narrow" id="cancel">Abbrechen</button></div>`;
+      <button class="small narrow" id="cancel">Abbrechen</button></div>
+      <div class="rechint">Jetzt lesen – danach kurz warten, dann „Fertig“.</div>`;
     $("stop").onclick = stopRec;
-    $("cancel").onclick = () => { capturing = false; clearInterval(timer); render(); };
+    $("cancel").onclick = cancel;
     const tick = () => {
       const s = Math.floor((Date.now() - startedAt) / 1000);
       $("status").textContent = Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
