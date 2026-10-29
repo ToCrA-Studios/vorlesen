@@ -250,12 +250,26 @@
 
   async function ensureMic() {
     if (ctx && ctx.state !== "closed" && stream && stream.active) { await ctx.resume(); return true; }
+    const iphone = /iPhone|iPad|iPod/.test(navigator.userAgent);
+    if (!navigator.mediaDevices?.getUserMedia) {
+      showError(iphone
+        ? "Hier darf die Seite das Mikrofon nicht benutzen. Bitte den Link in Safari öffnen (unten rechts auf das Safari-Symbol oder „In Safari öffnen“ tippen)."
+        : "Hier darf die Seite das Mikrofon nicht benutzen. Bitte den Link in Chrome öffnen (oben rechts ⋮ → „In Chrome öffnen“).", "kein mediaDevices");
+      return false;
+    }
     try {
       stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 },
       });
-    } catch {
-      showError("Das Mikrofon ist nicht erlaubt. Bitte beim Nachfragen „Erlauben“ tippen und nochmal versuchen.");
+    } catch (e) {
+      const msg = {
+        NotAllowedError: iphone
+          ? "Das Mikrofon ist für diese Seite gesperrt. So erlauben: oben (oder unten) in der Adresszeile auf „aA“ tippen → „Website-Einstellungen“ → Mikrofon → „Erlauben“. Steht das dort nicht: iPhone-Einstellungen → Apps → Safari → Mikrofon → „Fragen“. Dann die Seite neu laden."
+          : "Das Mikrofon ist für diese Seite gesperrt. So erlauben: links neben der Adresse auf das Schloss/Symbol tippen → Berechtigungen → Mikrofon → „Zulassen“. Dann die Seite neu laden.",
+        NotFoundError: "Es wurde kein Mikrofon gefunden.",
+        NotReadableError: "Das Mikrofon wird gerade von einer anderen App benutzt (z. B. Telefonat oder Sprachnachricht). Bitte die beenden und nochmal versuchen.",
+      }[e && e.name] || "Das Mikrofon lässt sich nicht starten. Bitte die Seite neu laden und nochmal versuchen.";
+      showError(msg, e && (e.name + ": " + e.message));
       return false;
     }
     ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -509,7 +523,12 @@
   }
 
   async function startRec() {
-    if (!(await ensureMic())) return;
+    try {
+      if (!(await ensureMic())) return;
+    } catch (e) {
+      showError("Die Aufnahme lässt sich nicht starten. Bitte die Seite neu laden und nochmal versuchen.", e && (e.name + ": " + e.message));
+      return;
+    }
     chunks = [];
     capturing = true;
     startedAt = Date.now();
@@ -611,7 +630,12 @@
   }
 
   function setStatus(msg) { const s = $("status"); if (s) s.textContent = msg; }
-  function showError(msg) { $("error").textContent = msg; $("error").classList.remove("hidden", "ok"); }
+  /** Fehler groß und verständlich; das Technische klein darunter (für mich, falls jemand einen Screenshot schickt). */
+  function showError(msg, detail) {
+    $("error").innerHTML = esc(msg) + (detail ? `<div style="font-size:13px;opacity:.6;margin-top:6px">${esc(detail)} · ${esc(navigator.userAgent.slice(0, 120))}</div>` : "");
+    $("error").classList.remove("hidden", "ok");
+    $("error").scrollIntoView({ block: "center" });
+  }
   function hideError() { $("error").classList.add("hidden"); $("error").classList.remove("ok"); }
 
   // Knopfleiste unten: Seite bekommt genau so viel Platz, dass der Text darüber frei bleibt
