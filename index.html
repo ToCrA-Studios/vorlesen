@@ -529,6 +529,36 @@
     p.play();
   }
 
+  /**
+   * WhatsApp wandelt geteilte Audiodateien in Sprachnachrichten (.m4a) um – dabei gehen die Satzmarken verloren.
+   * Darum steckt die WAV in einem kleinen PDF („Umschlag“): PDFs schickt WhatsApp unverändert als Dokument.
+   * Die Seite im PDF zeigt nur, wer was aufgenommen hat; die WAV hängt hinter dem Ende des PDFs.
+   */
+  function wrapInPdf(wav, lines) {
+    const latin = (t) => t.replace(/[^\x20-\x7E\xA0-\xFF]/g, "").replace(/([()\\])/g, "\\$1");
+    const text = "BT /F1 20 Tf 30 150 Td (" + latin(lines[0]) + ") Tj /F1 14 Tf 0 -32 Td (" + latin(lines[1]) +
+      ") Tj 0 -24 Td (" + latin(lines[2]) + ") Tj ET";
+    const objs = [
+      "<</Type/Catalog/Pages 2 0 R>>",
+      "<</Type/Pages/Kids[3 0 R]/Count 1>>",
+      "<</Type/Page/Parent 2 0 R/MediaBox[0 0 480 200]/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>",
+      "<</Length " + text.length + ">>\nstream\n" + text + "\nendstream",
+      "<</Type/Font/Subtype/Type1/BaseFont/Helvetica/Encoding/WinAnsiEncoding>>",
+    ];
+    let pdf = "%PDF-1.4\n";
+    const offsets = [];
+    objs.forEach((o, i) => { offsets.push(pdf.length); pdf += (i + 1) + " 0 obj\n" + o + "\nendobj\n"; });
+    const xref = pdf.length;
+    pdf += "xref\n0 " + (objs.length + 1) + "\n0000000000 65535 f \n" +
+      offsets.map((o) => String(o).padStart(10, "0") + " 00000 n \n").join("") +
+      "trailer\n<</Size " + (objs.length + 1) + "/Root 1 0 R>>\nstartxref\n" + xref + "\n%%EOF\n%VORLESEN-WAV\n";
+    const head = Uint8Array.from(pdf, (c) => c.charCodeAt(0) & 0xff);
+    const out = new Uint8Array(head.length + wav.byteLength);
+    out.set(head, 0);
+    out.set(new Uint8Array(wav), head.length);
+    return out;
+  }
+
   async function send() {
     const takes = info.items
       .map((it, i) => ({ ...it, n: i + 1, take: memory.get(it.id) }))
@@ -538,8 +568,10 @@
     const rate = takes[0].rate;
     const wav = buildWav(takes.filter((t) => t.rate === rate), rate);
     const clean = (s) => (s || "").replace(/[\\/:*?"<>|]/g, "-").trim();
-    const name = [clean(info.r) || "Aufnahme", clean(info.p), takes.length + " Sätze"].filter(Boolean).join(" - ") + ".wav";
-    const file = new File([wav], name, { type: "audio/wav" });
+    const name = [clean(info.r) || "Aufnahme", clean(info.p), takes.length + " Sätze"].filter(Boolean).join(" - ") + ".pdf";
+    const pdf = wrapInPdf(wav, ["Vorlese-Aufnahme", (info.r || "") + " - " + takes.length + " S\xE4tze",
+      "In den Buch-Vorlese-Editor ziehen."]);
+    const file = new File([pdf], name, { type: "application/pdf" });
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
       try {
         await navigator.share({ files: [file], title: name });
@@ -586,7 +618,7 @@
   applySize();
 
   // Für automatische Tests
-  window.__vorlesen = { buildWav, toPCM, info: () => info, saveTake, memory, render, setIdx: (i) => { idx = i; screen = "line"; render(); } };
+  window.__vorlesen = { buildWav, wrapInPdf, toPCM, info: () => info, saveTake, memory, render, setIdx: (i) => { idx = i; screen = "line"; render(); } };
 
   (async () => {
     try {
