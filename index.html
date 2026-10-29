@@ -120,6 +120,7 @@
   .tip { margin-top: 12px; font-size: 18px; line-height: 1.35; padding: 10px 12px; border-radius: 12px; background: var(--line); }
   .redo { background: #E8F1FD; color: #0B3D7A; }
   .redotag { color: var(--blue); }
+  .redolist { font-size: 16px; margin: 8px 0 12px; line-height: 1.4; }
   .linkbtn { border: 0; background: none; color: var(--blue); font-size: 17px; padding: 4px 0; text-decoration: underline; }
   .pick { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
   .pick button {
@@ -247,6 +248,24 @@
     }
   }
   const redoOpen = () => [...redo].filter((id) => !memory.has(id) && (all.length ? all : info.items).some((i) => i.id === id));
+
+  // ---------- Schon auf dem Mac: im Link steht, was von diesem Leser schon angekommen ist ----------
+  const atMac = new Set();
+  function applyArrived() {
+    atMac.clear();
+    try {
+      const y = new URLSearchParams(location.hash.slice(1)).get("y");
+      if (!y || !reader) return;
+      const map = JSON.parse(new TextDecoder().decode(b64urlToBytes(y)));
+      const key = Object.keys(map).find((k) => k.trim().toLowerCase() === reader.trim().toLowerCase());
+      if (!key) return;
+      const bits = b64urlToBytes(map[key]);
+      all.forEach((it, i) => { if (bits[i >> 3] & (1 << (i & 7))) atMac.add(it.id); });
+      redo.forEach((id) => atMac.delete(id));
+    } catch {}
+  }
+  /** fertig = hier aufgenommen oder schon beim Mac angekommen */
+  const isDone = (id) => memory.has(id) || atMac.has(id);
 
   async function saveTake(id, take) { memory.set(id, take); await dbDo("readwrite", (s) => s.put(take, keyFor(id))); }
   async function loadTakes() {
@@ -386,8 +405,11 @@
   const isSfx = (it) => it && it.role === SFX;
   const roleName = (r) => r === SFX ? "🔊 Geräusche" : r;
   const allRoles = () => { const r = [...new Set(all.map((i) => i.role).filter(Boolean))]; return [...r.filter((x) => x !== SFX), ...r.filter((x) => x === SFX)]; };
+  /** auf diesem Handy aufgenommen (das kann gesendet werden) */
   const recordedCount = () => info.items.filter((it) => memory.has(it.id)).length;
-  const firstOpen = () => { const i = info.items.findIndex((it) => !memory.has(it.id)); return i < 0 ? info.items.length : i; };
+  /** fertig, egal wo – für Fortschritt und „Weitermachen“ */
+  const doneCount = () => info.items.filter((it) => isDone(it.id)).length;
+  const firstOpen = () => { const i = info.items.findIndex((it) => !isDone(it.id)); return i < 0 ? info.items.length : i; };
 
   function header() {
     $("role").classList.toggle("hidden", !info.r);
@@ -396,7 +418,7 @@
         : roles().length > 1 || (roles()[0] && roles()[0] !== info.r) ? "Für " + info.r : "Deine Rolle: " + info.r;
       $("role").classList.remove("hidden");
     }
-    const done = recordedCount(), all = info.items.length;
+    const done = doneCount(), all = info.items.length;
     $("bar").style.width = (all ? done / all * 100 : 0) + "%";
     $("count").textContent = all && screen !== "line" ? done + " von " + all + " Sätzen aufgenommen" : "";
   }
@@ -417,7 +439,7 @@
         if (!reader) { inp.focus(); return; }
         try { localStorage.setItem("name", reader); } catch {}
         screen = "pick";
-        applyRedo().then(render);
+        applyRedo().then(() => { applyArrived(); render(); });
       };
       $("ok").onclick = ok;
       inp.onkeydown = (e) => { if (e.key === "Enter") ok(); };
@@ -427,16 +449,25 @@
       s.innerHTML = `
         <h1>${reader ? "Hallo " + esc(reader) + "! " : ""}Wen liest du? 📖</h1>
         ${reader ? `<button class="linkbtn" id="rename">Nicht ${esc(reader)}? Namen ändern</button>` : ""}
-        ${redoOpen().length ? `<div class="card redo">🔁 <b>${redoOpen().length} ${redoOpen().length === 1 ? "Satz" : "Sätze"}</b> bitte nochmal lesen – sie stehen bei ihrer Rolle wieder als offen.</div>` : ""}
+        ${redoOpen().length ? `<div class="card redo">🔁 <b>${redoOpen().length} ${redoOpen().length === 1 ? "Satz" : "Sätze"}</b> bitte nochmal lesen:
+          <div class="redolist">${all.filter((i) => redoOpen().includes(i.id)).map((i) => esc(i.label || i.role)).join(" · ")}</div>
+          <button class="big blue" id="doRedo">Jetzt nur diese ${redoOpen().length} lesen ›</button></div>` : ""}
         <div class="muted">${info.p ? esc(info.p) + " · " : ""}Tippe deine Rolle an – du kannst auch mehrere wählen.</div>
         <div class="pick">${allRoles().map((r) => `
           <button data-r="${esc(r)}" class="${picked.includes(r) ? "on" : ""}">
             <span class="box">${picked.includes(r) ? "✓" : ""}</span>${esc(roleName(r))}
-            ${(() => { const mine = all.filter((i) => i.role === r), got = mine.filter((i) => memory.has(i.id)).length;
+            ${(() => { const mine = all.filter((i) => i.role === r), got = mine.filter((i) => isDone(i.id)).length;
                return got === mine.length ? `<span class="done-tag">✓ fertig</span>` : `<span class="n">${got ? got + " von " : ""}${mine.length} ${r === SFX ? "Geräusche" : "Sätze"}</span>`; })()}
           </button>`).join("")}</div>
         ${all.some((i) => memory.has(i.id)) ? `<button class="linkbtn" id="wipe">🗑 Meine Aufnahmen auf diesem Handy löschen</button>` : ""}`;
       if ($("rename")) $("rename").onclick = () => { screen = "name"; render(); };
+      // nur die „nochmal“-Sätze, der Reihe nach
+      if ($("doRedo")) $("doRedo").onclick = () => {
+        const ids = redoOpen();
+        info.items = all.filter((i) => ids.includes(i.id));
+        info.r = [...new Set(info.items.map((i) => i.role))].join(", ");
+        idx = 0; lastSaved = null; screen = "line"; render(); window.scrollTo(0, 0);
+      };
       if ($("wipe")) $("wipe").onclick = async () => {
         const n = all.filter((i) => memory.has(i.id)).length;
         if (!confirm(`Alle ${n} Aufnahmen auf diesem Handy löschen? Was du schon gesendet hast, ist davon nicht betroffen.`)) return;
@@ -473,17 +504,17 @@
           </ol>
           <div class="muted" style="margin-top:10px">Alles wird sofort gespeichert. Du kannst jederzeit aufhören und später weitermachen.</div>
         </div>`;
-      const done = recordedCount();
+      const done = doneCount(), local = recordedCount();
       d.innerHTML = `
-        <button class="big ${done === info.items.length ? "green" : "blue"}" id="go">${done === info.items.length ? "✓ Alles aufgenommen – senden" : done ? "Weitermachen" : "Los geht's"}</button>
-        ${done ? `<div class="row"><button class="small" id="listAll">Satz neu aufnehmen</button><button class="small" id="sendNow">Bisherige senden</button></div>` : ""}
+        <button class="big ${done === info.items.length ? "green" : "blue"}" id="go">${done === info.items.length ? (local ? "✓ Alles aufgenommen – senden" : "✓ Alles schon beim Mac") : done ? "Weitermachen" : "Los geht's"}</button>
+        ${done ? `<div class="row"><button class="small" id="listAll">Satz neu aufnehmen</button>${local ? `<button class="small" id="sendNow">Bisherige senden</button>` : ""}</div>` : ""}
         ${choose ? `<div class="row"><button class="small" id="repick">Rolle ändern</button></div>` : ""}`;
       if (choose) {
         $("repick").onclick = () => { screen = "pick"; render(); };
       }
       $("go").onclick = () => { idx = firstOpen(); screen = idx >= info.items.length ? "end" : "line"; render(); };
       if (done) {
-        $("sendNow").onclick = () => { screen = "end"; render(); };
+        if ($("sendNow")) $("sendNow").onclick = () => { screen = "end"; render(); };
         $("listAll").onclick = () => { screen = "list"; render(); };
       }
       return;
@@ -491,10 +522,10 @@
     if (screen === "list") {
       s.innerHTML = `
         <h1>Alle Sätze</h1>
-        <div class="muted">Tippe auf einen Satz, um ihn (neu) aufzunehmen.</div>
+        <div class="muted">Tippe auf einen Satz, um ihn (neu) aufzunehmen. ✅ hier aufgenommen · ☑️ schon beim Mac</div>
         <div class="list">${info.items.map((it, i) => `
           <button class="item" data-i="${i}">
-            <span class="mark">${memory.has(it.id) ? "✅" : "⚪️"}</span>
+            <span class="mark">${memory.has(it.id) ? "✅" : atMac.has(it.id) ? "☑️" : "⚪️"}</span>
             <span><span class="chap">${it.chapter ? esc(it.chapter) + " · " : ""}Satz ${i + 1}${it.label ? " · " + esc(it.label) : roles().length > 1 && it.role ? " · " + esc(it.role) : ""}</span>${esc(it.text)}</span>
           </button>`).join("")}</div>`;
       s.querySelectorAll(".item").forEach((b) => b.onclick = () => { idx = Number(b.dataset.i); lastSaved = null; screen = "line"; render(); window.scrollTo(0, 0); });
@@ -507,7 +538,7 @@
       return;
     }
     if (screen === "end") {
-      const done = recordedCount(), all = info.items.length;
+      const done = doneCount(), all = info.items.length;
       s.innerHTML = `
         <h1>${done === all ? "Geschafft! 🎉" : "Fast fertig"}</h1>
         <div class="card">${done === all
@@ -515,7 +546,7 @@
           : `${done} von ${all} Sätzen sind aufgenommen. Du kannst schon senden oder zurückgehen und die fehlenden aufnehmen.`}</div>`;
       d.innerHTML = `
         <div class="status" id="status"></div>
-        <button class="big green" id="send" ${done ? "" : "disabled"}>Per WhatsApp senden</button>
+        <button class="big green" id="send" ${recordedCount() ? "" : "disabled"}>Per WhatsApp senden</button>
         <div class="row"><button class="small" id="back">☰ Sätze ansehen</button>${choose ? `<button class="small" id="other">Andere Rolle</button>` : ""}</div>`;
       $("send").onclick = send;
       $("back").onclick = () => { screen = "list"; render(); };
@@ -525,11 +556,12 @@
     // Satz
     const it = info.items[idx];
     const has = memory.has(it.id);
+    const macOnly = !has && atMac.has(it.id);
     s.innerHTML = `
       ${lastSaved !== null ? `<div class="banner">✓ Satz ${lastSaved + 1} gespeichert
           <button id="redoLast">Nochmal</button><button id="playLast">▶ Anhören</button></div>` : ""}
       <div class="card">
-        <div class="where">${it.chapter ? esc(it.chapter) + " · " : ""}${info.items.every(isSfx) ? "Geräusch" : "Satz"} ${idx + 1} von ${info.items.length}${it.label ? ` · <b>${esc(it.label)}</b>` : ""}${redo.has(it.id) && !memory.has(it.id) ? ` · <b class="redotag">🔁 bitte nochmal</b>` : ""}</div>
+        <div class="where">${it.chapter ? esc(it.chapter) + " · " : ""}${info.items.every(isSfx) ? "Geräusch" : "Satz"} ${idx + 1} von ${info.items.length}${it.label ? ` · <b>${esc(it.label)}</b>` : ""}${redo.has(it.id) && !memory.has(it.id) ? ` · <b class="redotag">🔁 bitte nochmal</b>` : ""}${macOnly ? ` · ☑️ schon beim Mac` : ""}</div>
         ${isSfx(it) ? `<div class="as">🔊 Nur das Geräusch machen</div>`
           : roles().length > 1 && it.role ? `<div class="as">Du sprichst: ${esc(it.role)}</div>` : ""}
         ${it.prev ? `<div class="before">${isSfx(it) ? "Beim Satz" : "Davor"} – ${esc(it.prev)}</div>` : ""}
@@ -545,7 +577,9 @@
     justRecorded = false;
     d.innerHTML = has ? `
         <button class="big ${fresh ? "green" : "blue"}" id="next">${fresh ? "👍 Gut – nächster Satz" : "✓ Aufgenommen – weiter ›"}</button>
-        <div class="row"><button class="small" id="listen">▶ Hören</button><button class="small" id="rec">↺ Nochmal</button><button class="small" id="prev" ${idx ? "" : "disabled"}>‹</button><button class="small" id="list">☰</button><button class="small" id="sendMid">📤</button></div>` : `
+        <div class="row"><button class="small" id="listen">▶ Hören</button><button class="small" id="rec">↺ Nochmal</button><button class="small" id="prev" ${idx ? "" : "disabled"}>‹</button><button class="small" id="list">☰</button><button class="small" id="sendMid">📤</button></div>` : macOnly ? `
+        <button class="big blue" id="next">☑️ Schon beim Mac – weiter ›</button>
+        <div class="row"><button class="small" id="rec">↺ Nochmal aufnehmen</button><button class="small" id="prev" ${idx ? "" : "disabled"}>‹</button><button class="small" id="list">☰</button><button class="small" id="sendMid" ${recordedCount() ? "" : "disabled"}>📤</button></div>` : `
         <button class="big red" id="rec"><span class="dot"></span> Aufnehmen</button>
         <div class="row"><button class="small" id="prev" ${idx ? "" : "disabled"}>‹ Zurück</button><button class="small" id="list">☰ Alle</button><button class="small" id="sendMid" ${recordedCount() ? "" : "disabled"}>📤 Senden</button><button class="small" id="skip">Später ›</button></div>`;
     requestAnimationFrame(fitText);
@@ -553,9 +587,9 @@
     // zwischendurch senden: alles bisher Aufgenommene – schon Gesendetes erkennt der Mac und nimmt es nicht doppelt
     $("sendMid").onclick = send;
     $("prev").onclick = () => { idx--; lastSaved = null; render(); };
-    if (has) {
+    if (has || macOnly) {
       $("next").onclick = () => { lastSaved = null; goNext(); };
-      $("listen").onclick = () => play(it.id);
+      if (has) $("listen").onclick = () => play(it.id);
       $("list").onclick = () => { screen = "list"; render(); };
     } else {
       $("skip").onclick = () => { lastSaved = null; goNext(); };
@@ -783,6 +817,7 @@
     db = await openDB();
     await loadTakes();
     await applyRedo();
+    applyArrived();
     render();
     if (!navigator.mediaDevices?.getUserMedia) {
       showError("Dieser Browser kann nicht aufnehmen. Bitte den Link in Safari (iPhone) oder Chrome (Android) öffnen.");
