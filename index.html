@@ -117,6 +117,8 @@
     width: 100%; margin-top: 16px; padding: 16px 18px; font-size: 26px; border-radius: 16px;
     border: 3px solid var(--line); background: var(--card); color: var(--text);
   }
+  .redo { background: #E8F1FD; color: #0B3D7A; }
+  .redotag { color: var(--blue); }
   .linkbtn { border: 0; background: none; color: var(--blue); font-size: 17px; padding: 4px 0; text-decoration: underline; }
   .pick { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
   .pick button {
@@ -224,6 +226,27 @@
       tx.onerror = () => res(undefined);
     });
   }
+  // ---------- „Nochmal lesen“: im Link steht, welche Sätze dieser Leser neu aufnehmen soll ----------
+  const redo = new Set();
+  function redoList() {
+    try {
+      const x = new URLSearchParams(location.hash.slice(1)).get("x");
+      if (!x || !reader) return {};
+      const map = JSON.parse(new TextDecoder().decode(b64urlToBytes(x)));
+      const key = Object.keys(map).find((k) => k.trim().toLowerCase() === reader.trim().toLowerCase());
+      return key ? map[key] : {};
+    } catch { return {}; }
+  }
+  async function applyRedo() {
+    for (const [id, at] of Object.entries(redoList())) {
+      const t = memory.get(id);
+      if (t && (t.at || 0) > at) continue;   // schon neu aufgenommen
+      redo.add(id);
+      if (t) { memory.delete(id); await dbDo("readwrite", (st) => st.delete(keyFor(id))); }
+    }
+  }
+  const redoOpen = () => [...redo].filter((id) => !memory.has(id) && (all.length ? all : info.items).some((i) => i.id === id));
+
   async function saveTake(id, take) { memory.set(id, take); await dbDo("readwrite", (s) => s.put(take, keyFor(id))); }
   async function loadTakes() {
     for (const it of choose ? all : info.items) {
@@ -389,7 +412,8 @@
         reader = inp.value.trim();
         if (!reader) { inp.focus(); return; }
         try { localStorage.setItem("name", reader); } catch {}
-        screen = "pick"; render();
+        screen = "pick";
+        applyRedo().then(render);
       };
       $("ok").onclick = ok;
       inp.onkeydown = (e) => { if (e.key === "Enter") ok(); };
@@ -399,6 +423,7 @@
       s.innerHTML = `
         <h1>${reader ? "Hallo " + esc(reader) + "! " : ""}Wen liest du? 📖</h1>
         ${reader ? `<button class="linkbtn" id="rename">Nicht ${esc(reader)}? Namen ändern</button>` : ""}
+        ${redoOpen().length ? `<div class="card redo">🔁 <b>${redoOpen().length} ${redoOpen().length === 1 ? "Satz" : "Sätze"}</b> bitte nochmal lesen – sie stehen bei ihrer Rolle wieder als offen.</div>` : ""}
         <div class="muted">${info.p ? esc(info.p) + " · " : ""}Tippe deine Rolle an – du kannst auch mehrere wählen.</div>
         <div class="pick">${allRoles().map((r) => `
           <button data-r="${esc(r)}" class="${picked.includes(r) ? "on" : ""}">
@@ -500,7 +525,7 @@
       ${lastSaved !== null ? `<div class="banner">✓ Satz ${lastSaved + 1} gespeichert
           <button id="redoLast">Nochmal</button><button id="playLast">▶ Anhören</button></div>` : ""}
       <div class="card">
-        <div class="where">${it.chapter ? esc(it.chapter) + " · " : ""}Satz ${idx + 1} von ${info.items.length}${it.label ? ` · <b>${esc(it.label)}</b>` : ""}</div>
+        <div class="where">${it.chapter ? esc(it.chapter) + " · " : ""}Satz ${idx + 1} von ${info.items.length}${it.label ? ` · <b>${esc(it.label)}</b>` : ""}${redo.has(it.id) && !memory.has(it.id) ? ` · <b class="redotag">🔁 bitte nochmal</b>` : ""}</div>
         ${roles().length > 1 && it.role ? `<div class="as">Du sprichst: ${esc(it.role)}</div>` : ""}
         ${it.prev ? `<div class="before">Davor – ${esc(it.prev)}</div>` : ""}
         <div class="text">${esc(it.text)}</div>
@@ -740,6 +765,7 @@
     }
     db = await openDB();
     await loadTakes();
+    await applyRedo();
     render();
     if (!navigator.mediaDevices?.getUserMedia) {
       showError("Dieser Browser kann nicht aufnehmen. Bitte den Link in Safari (iPhone) oder Chrome (Android) öffnen.");
