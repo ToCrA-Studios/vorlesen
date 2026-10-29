@@ -174,7 +174,7 @@
   function toItems(data) {
     const items = [];
     if (data.v === 2) {
-      data.c.forEach((ch, ci) => ch.l.forEach(([id, text, prev, role]) => items.push({ id, text, prev, role: role || "", chapter: ch.n, ci })));
+      data.c.forEach((ch, ci) => ch.l.forEach(([id, text, prev, role, label]) => items.push({ id, text, prev, role: role || "", label: label || "", chapter: ch.n, ci })));
     } else {
       (data.l || []).forEach((text, i) => items.push({ id: "x" + i, text, prev: "", chapter: "", ci: 0 }));
     }
@@ -302,7 +302,7 @@
   }
 
   // ---------- Ablauf ----------
-  let idx = 0, screen = "intro", lastSaved = null;
+  let idx = 0, screen = "intro", lastSaved = null, justRecorded = false;
   const roles = () => [...new Set(info.items.map((i) => i.role).filter(Boolean))];
   const allRoles = () => [...new Set(all.map((i) => i.role).filter(Boolean))];
   const recordedCount = () => info.items.filter((it) => memory.has(it.id)).length;
@@ -395,7 +395,7 @@
         <div class="list">${info.items.map((it, i) => `
           <button class="item" data-i="${i}">
             <span class="mark">${memory.has(it.id) ? "✅" : "⚪️"}</span>
-            <span><span class="chap">${it.chapter ? esc(it.chapter) + " · " : ""}Satz ${i + 1}${roles().length > 1 && it.role ? " · " + esc(it.role) : ""}</span>${esc(it.text)}</span>
+            <span><span class="chap">${it.chapter ? esc(it.chapter) + " · " : ""}Satz ${i + 1}${it.label ? " · " + esc(it.label) : roles().length > 1 && it.role ? " · " + esc(it.role) : ""}</span>${esc(it.text)}</span>
           </button>`).join("")}</div>`;
       s.querySelectorAll(".item").forEach((b) => b.onclick = () => { idx = Number(b.dataset.i); lastSaved = null; screen = "line"; render(); window.scrollTo(0, 0); });
       const done = recordedCount();
@@ -428,7 +428,7 @@
       ${lastSaved !== null ? `<div class="banner">✓ Satz ${lastSaved + 1} gespeichert
           <button id="redoLast">Nochmal</button><button id="playLast">▶ Anhören</button></div>` : ""}
       <div class="card">
-        <div class="where">${it.chapter ? esc(it.chapter) + " · " : ""}Satz ${idx + 1} von ${info.items.length}</div>
+        <div class="where">${it.chapter ? esc(it.chapter) + " · " : ""}Satz ${idx + 1} von ${info.items.length}${it.label ? ` · <b>${esc(it.label)}</b>` : ""}</div>
         ${roles().length > 1 && it.role ? `<div class="as">Du sprichst: ${esc(it.role)}</div>` : ""}
         ${it.prev ? `<div class="before">Davor – ${esc(it.prev)}</div>` : ""}
         <div class="text">${esc(it.text)}</div>
@@ -438,9 +438,11 @@
       $("redoLast").onclick = () => { idx = ls; lastSaved = null; render(); };
       $("playLast").onclick = () => play(info.items[ls].id);
     }
+    const fresh = justRecorded;
+    justRecorded = false;
     d.innerHTML = has ? `
-        <div class="status">✓ Dieser Satz ist schon aufgenommen.</div>
-        <button class="big blue" id="next">Weiter ›</button>
+        <div class="status">${fresh ? "Aufgenommen. War der Satz gut?" : "✓ Dieser Satz ist schon aufgenommen."}</div>
+        <button class="big ${fresh ? "green" : "blue"}" id="next">${fresh ? "👍 Gut – nächster Satz" : "Weiter ›"}</button>
         <div class="row"><button class="small" id="listen">▶ Anhören</button><button class="small" id="rec">↺ Neu aufnehmen</button></div>
         <div class="row"><button class="small" id="prev" ${idx ? "" : "disabled"}>‹ Zurück</button><button class="small" id="list">Übersicht</button></div>` : `
         <div class="status">Lies den Satz vor. Drück dazu auf den roten Knopf.</div>
@@ -495,8 +497,9 @@
     const n = chunks.reduce((s, c) => s + c.length, 0);
     if (n < ctx.sampleRate * 0.3) { render(); showError("Das war zu kurz – bitte nochmal."); return; }
     await saveTake(it.id, { pcm: toPCM(chunks), rate: ctx.sampleRate });
-    lastSaved = idx;
-    goNext();
+    // erst bestätigen, dann kommt der nächste Satz
+    justRecorded = true;
+    render();
   }
 
   function play(id) {
