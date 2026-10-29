@@ -117,6 +117,7 @@
     width: 100%; margin-top: 16px; padding: 16px 18px; font-size: 26px; border-radius: 16px;
     border: 3px solid var(--line); background: var(--card); color: var(--text);
   }
+  .tip { margin-top: 12px; font-size: 18px; line-height: 1.35; padding: 10px 12px; border-radius: 12px; background: var(--line); }
   .redo { background: #E8F1FD; color: #0B3D7A; }
   .redotag { color: var(--blue); }
   .linkbtn { border: 0; background: none; color: var(--blue); font-size: 17px; padding: 4px 0; text-decoration: underline; }
@@ -196,7 +197,7 @@
   function toItems(data) {
     const items = [];
     if (data.v === 2) {
-      data.c.forEach((ch, ci) => ch.l.forEach(([id, text, prev, role, label]) => items.push({ id, text, prev, role: role || "", label: label || "", chapter: ch.n, ci })));
+      data.c.forEach((ch, ci) => ch.l.forEach(([id, text, prev, role, label, tip]) => items.push({ id, text, prev, role: role || "", label: label || "", tip: tip || "", chapter: ch.n, ci })));
     } else {
       (data.l || []).forEach((text, i) => items.push({ id: "x" + i, text, prev: "", chapter: "", ci: 0 }));
     }
@@ -381,7 +382,10 @@
   // ---------- Ablauf ----------
   let idx = 0, screen = "intro", lastSaved = null, justRecorded = false;
   const roles = () => [...new Set(info.items.map((i) => i.role).filter(Boolean))];
-  const allRoles = () => [...new Set(all.map((i) => i.role).filter(Boolean))];
+  const SFX = "Geräusche";
+  const isSfx = (it) => it && it.role === SFX;
+  const roleName = (r) => r === SFX ? "🔊 Geräusche" : r;
+  const allRoles = () => { const r = [...new Set(all.map((i) => i.role).filter(Boolean))]; return [...r.filter((x) => x !== SFX), ...r.filter((x) => x === SFX)]; };
   const recordedCount = () => info.items.filter((it) => memory.has(it.id)).length;
   const firstOpen = () => { const i = info.items.findIndex((it) => !memory.has(it.id)); return i < 0 ? info.items.length : i; };
 
@@ -427,9 +431,9 @@
         <div class="muted">${info.p ? esc(info.p) + " · " : ""}Tippe deine Rolle an – du kannst auch mehrere wählen.</div>
         <div class="pick">${allRoles().map((r) => `
           <button data-r="${esc(r)}" class="${picked.includes(r) ? "on" : ""}">
-            <span class="box">${picked.includes(r) ? "✓" : ""}</span>${esc(r)}
+            <span class="box">${picked.includes(r) ? "✓" : ""}</span>${esc(roleName(r))}
             ${(() => { const mine = all.filter((i) => i.role === r), got = mine.filter((i) => memory.has(i.id)).length;
-               return got === mine.length ? `<span class="done-tag">✓ fertig</span>` : `<span class="n">${got ? got + " von " : ""}${mine.length} Sätze</span>`; })()}
+               return got === mine.length ? `<span class="done-tag">✓ fertig</span>` : `<span class="n">${got ? got + " von " : ""}${mine.length} ${r === SFX ? "Geräusche" : "Sätze"}</span>`; })()}
           </button>`).join("")}</div>
         ${all.some((i) => memory.has(i.id)) ? `<button class="linkbtn" id="wipe">🗑 Meine Aufnahmen auf diesem Handy löschen</button>` : ""}`;
       if ($("rename")) $("rename").onclick = () => { screen = "name"; render(); };
@@ -451,7 +455,7 @@
         <button class="small" id="readAll">📖 Ganzes Buch – alle Rollen</button>`;
       $("ok").onclick = async () => { applyPick(); await loadTakes(); screen = "intro"; render(); };
       // ganzes Buch = alle Rollen, trotzdem Satz für Satz in Buchreihenfolge
-      $("readAll").onclick = async () => { picked = allRoles(); applyPick(); await loadTakes(); screen = "intro"; render(); window.scrollTo(0, 0); };
+      $("readAll").onclick = async () => { picked = allRoles().filter((r) => r !== SFX); applyPick(); await loadTakes(); screen = "intro"; render(); window.scrollTo(0, 0); };
       return;
     }
     if (screen === "intro") {
@@ -460,7 +464,7 @@
         <h1>Hallo! 😊</h1>
         <div class="card">
           ${info.p ? `<div class="where">${esc(info.p)}</div>` : ""}
-          <div>Du sprichst <b>${info.items.length} Sätze</b>${chapters.length > 1 ? ` in ${chapters.length} Kapiteln` : ""}.</div>
+          <div>${info.items.every(isSfx) ? `Du machst <b>${info.items.length} Geräusche</b>` : `Du sprichst <b>${info.items.length} Sätze</b>`}${chapters.length > 1 ? ` in ${chapters.length} Kapiteln` : ""}.</div>
           ${roles().length > 1 ? `<div style="margin-top:6px">Deine Figuren: <b>${roles().map(esc).join(", ")}</b> – bei jedem Satz steht, wer gerade dran ist.</div>` : ""}
           <ol class="how">
             <li>Auf den <b>roten Knopf</b> drücken</li>
@@ -525,10 +529,12 @@
       ${lastSaved !== null ? `<div class="banner">✓ Satz ${lastSaved + 1} gespeichert
           <button id="redoLast">Nochmal</button><button id="playLast">▶ Anhören</button></div>` : ""}
       <div class="card">
-        <div class="where">${it.chapter ? esc(it.chapter) + " · " : ""}Satz ${idx + 1} von ${info.items.length}${it.label ? ` · <b>${esc(it.label)}</b>` : ""}${redo.has(it.id) && !memory.has(it.id) ? ` · <b class="redotag">🔁 bitte nochmal</b>` : ""}</div>
-        ${roles().length > 1 && it.role ? `<div class="as">Du sprichst: ${esc(it.role)}</div>` : ""}
-        ${it.prev ? `<div class="before">Davor – ${esc(it.prev)}</div>` : ""}
+        <div class="where">${it.chapter ? esc(it.chapter) + " · " : ""}${info.items.every(isSfx) ? "Geräusch" : "Satz"} ${idx + 1} von ${info.items.length}${it.label ? ` · <b>${esc(it.label)}</b>` : ""}${redo.has(it.id) && !memory.has(it.id) ? ` · <b class="redotag">🔁 bitte nochmal</b>` : ""}</div>
+        ${isSfx(it) ? `<div class="as">🔊 Nur das Geräusch machen</div>`
+          : roles().length > 1 && it.role ? `<div class="as">Du sprichst: ${esc(it.role)}</div>` : ""}
+        ${it.prev ? `<div class="before">${isSfx(it) ? "Beim Satz" : "Davor"} – ${esc(it.prev)}</div>` : ""}
         <div class="text">${esc(it.text)}</div>
+        ${it.tip ? `<div class="tip">💡 ${esc(it.tip)}</div>` : ""}
       </div>`;
     if (lastSaved !== null) {
       const ls = lastSaved;
@@ -562,7 +568,8 @@
     const el = document.querySelector("#screen .text");
     if (!el) return;
     const dock = $("dock").parentElement.offsetHeight;
-    const avail = window.innerHeight - dock - (el.getBoundingClientRect().top + window.scrollY) - 28;
+    const tip = document.querySelector("#screen .tip");
+    const avail = window.innerHeight - dock - (el.getBoundingClientRect().top + window.scrollY) - 28 - (tip ? tip.offsetHeight + 12 : 0);
     let size = fs;
     el.style.fontSize = size + "px";
     while (el.scrollHeight > avail && size > 22) { size -= 2; el.style.fontSize = size + "px"; }
@@ -744,8 +751,11 @@
       if (data) {
         all = toItems(data);
         // Link für alle: „Davor“ aus dem vorigen Satz desselben Kapitels bilden
+        // (Geräusche zählen dabei nicht als Satz davor; ein Geräusch zeigt den Satz, zu dem es gehört)
         all.forEach((it, i) => {
-          const p = all[i - 1];
+          let j = i - 1;
+          while (j >= 0 && isSfx(all[j])) j--;
+          const p = all[j];
           if (!it.prev && p && p.ci === it.ci) it.prev = (p.role || "?") + ": " + (p.text.length > 110 ? p.text.slice(0, 110) + " …" : p.text);
         });
         info = { p: data.p || "", r: data.r || "", items: all };
