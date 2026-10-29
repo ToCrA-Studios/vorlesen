@@ -322,7 +322,7 @@
   function header() {
     $("role").classList.toggle("hidden", !info.r);
     if (info.r) {
-      $("role").textContent = choose ? info.r
+      $("role").textContent = choose ? (picked.length === allRoles().length && picked.length > 1 ? "Alle Rollen" : info.r)
         : roles().length > 1 || (roles()[0] && roles()[0] !== info.r) ? "Für " + info.r : "Deine Rolle: " + info.r;
       $("role").classList.remove("hidden");
     }
@@ -353,20 +353,10 @@
       });
       d.innerHTML = `
         <button class="big blue" id="ok" ${picked.length ? "" : "disabled"}>${picked.length ? "Weiter ›" : "Bitte eine Rolle antippen"}</button>
-        <button class="small" id="readAll">Ganzes Buch lesen</button>`;
+        <button class="small" id="readAll">📖 Ganzes Buch – alle Rollen</button>`;
       $("ok").onclick = async () => { applyPick(); await loadTakes(); screen = "intro"; render(); };
-      $("readAll").onclick = () => { screen = "book"; render(); window.scrollTo(0, 0); };
-      return;
-    }
-    if (screen === "book") {
-      let html = "", ch = null;
-      for (const it of all) {
-        if (it.chapter !== ch) { ch = it.chapter; if (ch) html += `<h2>${esc(ch)}</h2>`; }
-        html += `<p class="${picked.includes(it.role) ? "mine" : ""}"><span class="who">${esc(it.role)}</span>${esc(it.text)}</p>`;
-      }
-      s.innerHTML = `<h1>Das ganze Buch</h1><div class="book">${html}</div>`;
-      d.innerHTML = `<button class="big blue" id="back">‹ Zurück</button>`;
-      $("back").onclick = () => { screen = info.items.length ? "intro" : "pick"; render(); window.scrollTo(0, 0); };
+      // ganzes Buch = alle Rollen, trotzdem Satz für Satz in Buchreihenfolge
+      $("readAll").onclick = async () => { picked = allRoles(); applyPick(); await loadTakes(); screen = "intro"; render(); window.scrollTo(0, 0); };
       return;
     }
     if (screen === "intro") {
@@ -388,10 +378,9 @@
       d.innerHTML = `
         <button class="big ${done === info.items.length ? "green" : "blue"}" id="go">${done === info.items.length ? "✓ Alles aufgenommen – senden" : done ? "Weitermachen" : "Los geht's"}</button>
         ${done ? `<div class="row"><button class="small" id="listAll">Satz neu aufnehmen</button><button class="small" id="sendNow">Bisherige senden</button></div>` : ""}
-        ${choose ? `<div class="row"><button class="small" id="repick">Rolle ändern</button><button class="small" id="readAll">Ganzes Buch lesen</button></div>` : ""}`;
+        ${choose ? `<div class="row"><button class="small" id="repick">Rolle ändern</button></div>` : ""}`;
       if (choose) {
         $("repick").onclick = () => { screen = "pick"; render(); };
-        $("readAll").onclick = () => { screen = "book"; render(); window.scrollTo(0, 0); };
       }
       $("go").onclick = () => { idx = firstOpen(); screen = idx >= info.items.length ? "end" : "line"; render(); };
       if (done) {
