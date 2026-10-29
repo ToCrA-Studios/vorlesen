@@ -751,6 +751,9 @@
       if (data) {
         all = toItems(data);
         // Link für alle: „Davor“ aus dem vorigen Satz desselben Kapitels bilden
+        // Link für alle: Kennzeichnung „Mika 3“ selbst zählen (steht nicht im Link, das hält ihn kurz)
+        const perRole = {};
+        all.forEach((it) => { if (!isSfx(it) && it.role && !it.label) { perRole[it.role] = (perRole[it.role] || 0) + 1; it.label = it.role + " " + perRole[it.role]; } });
         // (Geräusche zählen dabei nicht als Satz davor; ein Geräusch zeigt den Satz, zu dem es gehört)
         all.forEach((it, i) => {
           let j = i - 1;
@@ -766,8 +769,12 @@
           if (!reader) screen = "name";
         }
       }
-    } catch {
-      showError("Der Link ist beschädigt – bitte frag nach einem neuen Link.");
+    } catch (e) {
+      // Zeichenzahl hilft zu erkennen, ob der Link unterwegs abgeschnitten wurde
+      const len = location.href.length, cut = !/[&]z=1/.test(location.hash);
+      showError(cut ? "Der Link ist unvollständig angekommen – er wurde unterwegs abgeschnitten. Bitte den Link direkt aus WhatsApp öffnen (nicht über Notizen)."
+                    : "Der Link ist beschädigt – bitte frag nach einem neuen Link.",
+                `${e && e.name}: ${e && e.message} · ${len} Zeichen angekommen`);
     }
     if (!all.length) {
       $("screen").innerHTML = '<div class="card">In diesem Link steht kein Text. Bitte frag nach einem neuen Link.</div>';
