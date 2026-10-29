@@ -291,6 +291,24 @@
     return true;
   }
 
+  /**
+   * Das Tippen auf Aufnehmen/Fertig klopft hörbar ins Mikrofon, wenn das Handy auf dem Tisch liegt.
+   * Darum vorne und hinten ein Stück wegschneiden und weich ein- und ausblenden.
+   */
+  const CUT_HEAD = 0.3, CUT_TAIL = 0.35, FADE = 0.02;
+  function trimTaps(parts, rate) {
+    const n = parts.reduce((s, c) => s + c.length, 0);
+    const all = new Float32Array(n);
+    let o = 0;
+    for (const c of parts) { all.set(c, o); o += c.length; }
+    const head = Math.round(CUT_HEAD * rate), tail = Math.round(CUT_TAIL * rate);
+    if (n - head - tail < rate * 0.3) return [all];
+    const out = all.slice(head, n - tail);
+    const f = Math.min(Math.round(FADE * rate), out.length >> 1);
+    for (let i = 0; i < f; i++) { const g = i / f; out[i] *= g; out[out.length - 1 - i] *= g; }
+    return [out];
+  }
+
   /** Float → 16-Bit-PCM; leise Aufnahmen behutsam anheben (max. +20 dB, Spitze −1 dB). */
   function toPCM(parts) {
     const n = parts.reduce((s, c) => s + c.length, 0);
@@ -553,8 +571,8 @@
     try { await wakeLock?.release(); } catch {}
     const it = info.items[idx];
     const n = chunks.reduce((s, c) => s + c.length, 0);
-    if (n < ctx.sampleRate * 0.3) { render(); showError("Das war zu kurz – bitte nochmal."); return; }
-    await saveTake(it.id, { pcm: toPCM(chunks), rate: ctx.sampleRate, at: Date.now() });
+    if (n < ctx.sampleRate * 0.8) { render(); showError("Das war zu kurz – bitte nochmal."); return; }
+    await saveTake(it.id, { pcm: toPCM(trimTaps(chunks, ctx.sampleRate)), rate: ctx.sampleRate, at: Date.now() });
     // erst bestätigen, dann kommt der nächste Satz
     justRecorded = true;
     render();
@@ -664,7 +682,7 @@
   applySize();
 
   // Für automatische Tests
-  window.__vorlesen = { buildWav, wrapInPdf, toPCM, info: () => info, saveTake, memory, render, setIdx: (i) => { idx = i; screen = "line"; render(); } };
+  window.__vorlesen = { trimTaps, buildWav, wrapInPdf, toPCM, info: () => info, saveTake, memory, render, setIdx: (i) => { idx = i; screen = "line"; render(); } };
 
   (async () => {
     try {
