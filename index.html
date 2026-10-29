@@ -110,6 +110,7 @@
   @keyframes pulse { 50% { opacity: 0.3; } }
   .error { margin-top: 12px; padding: 14px 16px; border-radius: 14px; background: #FDE8E6; color: #7A1A12; font-size: 18px; }
   .hidden { display: none !important; }
+  .error.ok { background: var(--ok-bg); color: var(--ok-text); }
   .namein {
     width: 100%; margin-top: 16px; padding: 16px 18px; font-size: 26px; border-radius: 16px;
     border: 3px solid var(--line); background: var(--card); color: var(--text);
@@ -470,11 +471,13 @@
     justRecorded = false;
     d.innerHTML = has ? `
         <button class="big ${fresh ? "green" : "blue"}" id="next">${fresh ? "👍 Gut – nächster Satz" : "✓ Aufgenommen – weiter ›"}</button>
-        <div class="row"><button class="small" id="listen">▶ Hören</button><button class="small" id="rec">↺ Nochmal</button><button class="small" id="prev" ${idx ? "" : "disabled"}>‹ Zurück</button><button class="small" id="list">☰</button></div>` : `
+        <div class="row"><button class="small" id="listen">▶ Hören</button><button class="small" id="rec">↺ Nochmal</button><button class="small" id="prev" ${idx ? "" : "disabled"}>‹</button><button class="small" id="list">☰</button><button class="small" id="sendMid">📤</button></div>` : `
         <button class="big red" id="rec"><span class="dot"></span> Aufnehmen</button>
-        <div class="row"><button class="small" id="prev" ${idx ? "" : "disabled"}>‹ Zurück</button><button class="small" id="list">☰ Alle</button><button class="small" id="skip">Später ›</button></div>`;
+        <div class="row"><button class="small" id="prev" ${idx ? "" : "disabled"}>‹ Zurück</button><button class="small" id="list">☰ Alle</button><button class="small" id="sendMid" ${recordedCount() ? "" : "disabled"}>📤 Senden</button><button class="small" id="skip">Später ›</button></div>`;
     requestAnimationFrame(fitText);
     $("rec").onclick = startRec;
+    // zwischendurch senden: alles bisher Aufgenommene – schon Gesendetes erkennt der Mac und nimmt es nicht doppelt
+    $("sendMid").onclick = send;
     $("prev").onclick = () => { idx--; lastSaved = null; render(); };
     if (has) {
       $("next").onclick = () => { lastSaved = null; goNext(); };
@@ -594,6 +597,7 @@
       try {
         await navigator.share({ files: [file], title: name });
         setStatus("Danke! 💛 Die Aufnahme ist unterwegs.");
+        if (screen === "line") { $("error").textContent = "📤 Gesendet – du kannst einfach weiterlesen."; $("error").classList.remove("hidden"); $("error").classList.add("ok"); }
       } catch (e) {
         if (e.name !== "AbortError") showError("Teilen hat nicht geklappt. Bitte nochmal auf „Per WhatsApp senden“ drücken.");
       }
@@ -607,8 +611,8 @@
   }
 
   function setStatus(msg) { const s = $("status"); if (s) s.textContent = msg; }
-  function showError(msg) { $("error").textContent = msg; $("error").classList.remove("hidden"); }
-  function hideError() { $("error").classList.add("hidden"); }
+  function showError(msg) { $("error").textContent = msg; $("error").classList.remove("hidden", "ok"); }
+  function hideError() { $("error").classList.add("hidden"); $("error").classList.remove("ok"); }
 
   // Knopfleiste unten: Seite bekommt genau so viel Platz, dass der Text darüber frei bleibt
   try {
